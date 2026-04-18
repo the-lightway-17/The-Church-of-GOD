@@ -1,107 +1,124 @@
-import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
-import dbConnect from "@/lib/db"
-import Question from "@/lib/models/question"
-import Answer from "@/lib/models/answer"
-import User from "@/lib/models/user"
-import { awardPoints, checkAndAwardBadges } from "@/lib/gamification"
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  try {
-    await dbConnect()
-    const { id } = await params
+  const supabase = await createClient()
+  const { id } = await params
+  const { searchParams } = new URL(request.url)
+  const sort = searchParams.get('sort') ?? 'votes'
 
-    const searchParams = request.nextUrl.searchParams
-    const sort = searchParams.get("sort") || "votes"
+  let query = supabase
+    .from('answers')
+    .select(`
+      *,
+      author:profiles!answers_user_id_fkey(id, display_name, avatar_url, level, points)
+    `)
+    .eq('question_id', id)
 
-    let sortQuery: Record<string, 1 | -1> = { voteCount: -1, createdAt: -1 }
-    if (sort === "recent") sortQuery = { createdAt: -1 }
-    if (sort === "oldest") sortQuery = { createdAt: 1 }
-
-    const answers = await Answer.find({ question: id })
-      .sort(sortQuery)
-      .populate("author", "name image level points")
-      .lean()
-
-    return NextResponse.json({ answers })
-  } catch (error) {
-    console.error("Error fetching answers:", error)
-    return NextResponse.json(
-      { error: "Failed to fetch answers" },
-      { status: 500 }
-    )
+  switch (sort) {
+    case 'recent':
+      query = query.order('created_at', { ascending: false })
+      break
+    case 'oldest':
+      query = query.order('created_at', { ascending: true })
+      break
+    case 'votes':
+    default:
+      query = query.order('vote_count', { ascending: false }).order('created_at', { ascending: false })
   }
+
+  const { data: answers, error } = await query
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  return NextResponse.json({ answers })
 }
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  try {
-    const session = await auth()
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
+  const supabase = await createClient()
+  const { id } = await params
 
-    await dbConnect()
-    const { id } = await params
+  const { data: { user } } = await supabase.auth.getUser()
 
-    const body = await request.json()
-    const { content, bibleReferences } = body
-
-    if (!content) {
-      return NextResponse.json(
-        { error: "Content is required" },
-        { status: 400 }
-      )
-    }
-
-    // Check if question exists
-    const question = await Question.findById(id)
-    if (!question) {
-      return NextResponse.json(
-        { error: "Question not found" },
-        { status: 404 }
-      )
-    }
-
-    // Create answer
-    const answer = await Answer.create({
-      content,
-      question: id,
-      author: session.user.id,
-      bibleReferences: bibleReferences || [],
-    })
-
-    // Update question answer count
-    await Question.findByIdAndUpdate(id, {
-      $inc: { answerCount: 1 },
-      isAnswered: true,
-    })
-
-    // Award points for answering
-    await awardPoints(session.user.id, "answerQuestion")
-
-    // Increment user's answer count
-    await User.findByIdAndUpdate(session.user.id, {
-      $inc: { answerCount: 1 },
-    })
-
-    // Check for badges
-    await checkAndAwardBadges(session.user.id)
-
-    // Populate author for response
-    await answer.populate("author", "name image level")
-
-    return NextResponse.json({ answer }, { status: 201 })
-  } catch (error) {
-    console.error("Error creating answer:", error)
-    return NextResponse.json(
-      { error: "Failed to create answer" },
-      { status: 500 }
-    )
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+
+  const body = await request.json()
+  const { content, bible_references } = body
+
+  if (!content) {
+    return NextResponse.json({ error: 'Content is required' }, { status: 400 })
+  }
+
+  // Check if question exists
+  const { data: question } = await supabase
+    .from('questions')
+    .select('id, user_id')
+    .eq('id', id)
+    .single()
+
+  if (!question) {
+    return NextResponse.json({ error: 'Question not found' }, { status: 404 })
+  }
+
+  // Create answer
+  const { data: answer, error } = await supabase
+    .from('answers')
+    .insert({
+      question_id: id,
+      user_id: user.id,
+      content,
+      bible_references: bible_references ?? [],
+    })
+    .select(`
+      *,
+      author:profiles!answers_user_id_fkey(id, display_name, avatar_url, level, points)
+    `)
+    .single()
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  // Update question's answer count and mark as answered
+  await supabase
+    .from('questions')
+    .update({ 
+      answer_count: supabase.sql`answer_count + 1`,
+      is_answered: true,
+      status: 'answered'
+    })
+    .eq('id', id)
+
+  // Update user's answers count and points
+  await supabase
+    .from('profiles')
+    .update({ 
+      answers_count: supabase.sql`answers_count + 1`,
+      points: supabase.sql`points + 10`
+    })
+    .eq('id', user.id)
+
+  // Notify question author
+  if (question.user_id !== user.id) {
+    await supabase.from('notifications').insert({
+      user_id: question.user_id,
+      type: 'answer',
+      title: 'New answer on your question',
+      message: 'Someone answered your question',
+      link: `/questions/${id}`,
+      actor_id: user.id,
+    })
+  }
+
+  return NextResponse.json({ answer }, { status: 201 })
 }

@@ -1,50 +1,37 @@
-import { NextRequest, NextResponse } from "next/server"
-import dbConnect from "@/lib/db"
-import User from "@/lib/models/user"
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
 
 export async function GET(request: NextRequest) {
-  try {
-    await dbConnect()
+  const supabase = await createClient()
+  const { searchParams } = new URL(request.url)
 
-    const searchParams = request.nextUrl.searchParams
-    const period = searchParams.get("period") || "all-time"
-    const limit = parseInt(searchParams.get("limit") || "50")
-    const page = parseInt(searchParams.get("page") || "1")
+  const limit = parseInt(searchParams.get('limit') ?? '50')
+  const page = parseInt(searchParams.get('page') ?? '1')
+  const offset = (page - 1) * limit
 
-    // For simplicity, we'll use total points
-    // In production, you'd want to track weekly/monthly points separately
-    const skip = (page - 1) * limit
+  const { data: users, error, count } = await supabase
+    .from('profiles')
+    .select('*', { count: 'exact' })
+    .order('points', { ascending: false })
+    .range(offset, offset + limit - 1)
 
-    const [users, total] = await Promise.all([
-      User.find({})
-        .select("name image points level streak badges questionCount answerCount")
-        .sort({ points: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
-      User.countDocuments({}),
-    ])
-
-    // Add rank to users
-    const rankedUsers = users.map((user, index) => ({
-      ...user,
-      rank: skip + index + 1,
-    }))
-
-    return NextResponse.json({
-      users: rankedUsers,
-      pagination: {
-        page,
-        limit,
-        total,
-        pages: Math.ceil(total / limit),
-      },
-    })
-  } catch (error) {
-    console.error("Error fetching leaderboard:", error)
-    return NextResponse.json(
-      { error: "Failed to fetch leaderboard" },
-      { status: 500 }
-    )
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
   }
+
+  // Add rank to users
+  const rankedUsers = users?.map((user, index) => ({
+    ...user,
+    rank: offset + index + 1,
+  })) ?? []
+
+  return NextResponse.json({
+    users: rankedUsers,
+    pagination: {
+      page,
+      limit,
+      total: count ?? 0,
+      pages: Math.ceil((count ?? 0) / limit),
+    },
+  })
 }

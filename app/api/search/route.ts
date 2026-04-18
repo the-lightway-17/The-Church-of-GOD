@@ -1,110 +1,91 @@
-import { NextRequest, NextResponse } from "next/server"
-import dbConnect from "@/lib/db"
-import Question from "@/lib/models/question"
-import User from "@/lib/models/user"
-import Group from "@/lib/models/group"
-import Discussion from "@/lib/models/discussion"
-import Poll from "@/lib/models/poll"
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
 
 export async function GET(request: NextRequest) {
-  try {
-    await dbConnect()
+  const supabase = await createClient()
+  const { searchParams } = new URL(request.url)
 
-    const searchParams = request.nextUrl.searchParams
-    const query = searchParams.get("q")
-    const type = searchParams.get("type") || "all"
-    const limit = parseInt(searchParams.get("limit") || "10")
+  const query = searchParams.get('q')
+  const type = searchParams.get('type') ?? 'all'
+  const limit = parseInt(searchParams.get('limit') ?? '10')
 
-    if (!query) {
-      return NextResponse.json(
-        { error: "Search query is required" },
-        { status: 400 }
-      )
-    }
-
-    const searchRegex = { $regex: query, $options: "i" }
-    const results: Record<string, unknown[]> = {}
-
-    // Search questions
-    if (type === "all" || type === "questions") {
-      const questions = await Question.find({
-        $or: [
-          { title: searchRegex },
-          { content: searchRegex },
-          { tags: searchRegex },
-        ],
-      })
-        .select("title content tags author voteCount answerCount createdAt")
-        .populate("author", "name image")
-        .sort({ voteCount: -1 })
-        .limit(limit)
-        .lean()
-      results.questions = questions
-    }
-
-    // Search users
-    if (type === "all" || type === "users") {
-      const users = await User.find({
-        $or: [{ name: searchRegex }, { bio: searchRegex }],
-      })
-        .select("name image bio points level badges")
-        .sort({ points: -1 })
-        .limit(limit)
-        .lean()
-      results.users = users
-    }
-
-    // Search groups
-    if (type === "all" || type === "groups") {
-      const groups = await Group.find({
-        $or: [
-          { name: searchRegex },
-          { description: searchRegex },
-          { tags: searchRegex },
-        ],
-        isPrivate: false,
-      })
-        .select("name description memberCount category tags")
-        .sort({ memberCount: -1 })
-        .limit(limit)
-        .lean()
-      results.groups = groups
-    }
-
-    // Search discussions
-    if (type === "all" || type === "discussions") {
-      const discussions = await Discussion.find({
-        $or: [{ title: searchRegex }, { content: searchRegex }],
-      })
-        .select("title content group replyCount createdAt")
-        .populate("group", "name")
-        .sort({ createdAt: -1 })
-        .limit(limit)
-        .lean()
-      results.discussions = discussions
-    }
-
-    // Search polls
-    if (type === "all" || type === "polls") {
-      const polls = await Poll.find({
-        question: searchRegex,
-      })
-        .select("question category totalVotes endsAt")
-        .sort({ totalVotes: -1 })
-        .limit(limit)
-        .lean()
-
-      // Add isActive status
-      const now = new Date()
-      results.polls = polls.map((poll) => ({
-        ...poll,
-        isActive: new Date(poll.endsAt) > now,
-      }))
-    }
-
-    return NextResponse.json({ results, query })
-  } catch (error) {
-    console.error("Error searching:", error)
-    return NextResponse.json({ error: "Search failed" }, { status: 500 })
+  if (!query) {
+    return NextResponse.json({ error: 'Search query is required' }, { status: 400 })
   }
+
+  const results: Record<string, unknown[]> = {}
+
+  // Search questions
+  if (type === 'all' || type === 'questions') {
+    const { data: questions } = await supabase
+      .from('questions')
+      .select(`
+        id, title, content, tags, vote_count, answer_count, created_at,
+        author:profiles!questions_user_id_fkey(id, display_name, avatar_url)
+      `)
+      .or(`title.ilike.%${query}%,content.ilike.%${query}%`)
+      .order('vote_count', { ascending: false })
+      .limit(limit)
+
+    results.questions = questions ?? []
+  }
+
+  // Search users
+  if (type === 'all' || type === 'users') {
+    const { data: users } = await supabase
+      .from('profiles')
+      .select('id, display_name, avatar_url, bio, points, level')
+      .or(`display_name.ilike.%${query}%,bio.ilike.%${query}%`)
+      .order('points', { ascending: false })
+      .limit(limit)
+
+    results.users = users ?? []
+  }
+
+  // Search groups
+  if (type === 'all' || type === 'groups') {
+    const { data: groups } = await supabase
+      .from('groups')
+      .select('id, name, description, member_count, tags')
+      .eq('is_private', false)
+      .or(`name.ilike.%${query}%,description.ilike.%${query}%`)
+      .order('member_count', { ascending: false })
+      .limit(limit)
+
+    results.groups = groups ?? []
+  }
+
+  // Search discussions
+  if (type === 'all' || type === 'discussions') {
+    const { data: discussions } = await supabase
+      .from('discussions')
+      .select(`
+        id, title, content, reply_count, created_at,
+        group:groups!discussions_group_id_fkey(id, name)
+      `)
+      .or(`title.ilike.%${query}%,content.ilike.%${query}%`)
+      .order('created_at', { ascending: false })
+      .limit(limit)
+
+    results.discussions = discussions ?? []
+  }
+
+  // Search polls
+  if (type === 'all' || type === 'polls') {
+    const { data: polls } = await supabase
+      .from('polls')
+      .select('id, question, total_votes, ends_at')
+      .ilike('question', `%${query}%`)
+      .order('total_votes', { ascending: false })
+      .limit(limit)
+
+    // Add isActive status
+    const now = new Date()
+    results.polls = (polls ?? []).map((poll) => ({
+      ...poll,
+      is_active: !poll.ends_at || new Date(poll.ends_at) > now,
+    }))
+  }
+
+  return NextResponse.json({ results, query })
 }

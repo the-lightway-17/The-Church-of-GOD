@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useSession, signOut } from 'next-auth/react'
+import { useAuth } from '@/components/providers/auth-provider'
 import {
   BookOpen,
   Search,
@@ -39,7 +39,7 @@ const navItems = [
 
 export function Header() {
   const pathname = usePathname()
-  const { data: session, status } = useSession()
+  const { user, profile, signOut, loading } = useAuth()
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -87,20 +87,20 @@ export function Header() {
             </Button>
           </Link>
 
-          {status === 'authenticated' && session?.user ? (
+          {!loading && user && profile ? (
             <>
               {/* Streak Counter */}
-              {session.user.streakDays && session.user.streakDays > 0 && (
+              {profile.streak_days > 0 && (
                 <div className="hidden items-center gap-1 rounded-full bg-accent/50 px-3 py-1 sm:flex">
                   <Flame className="size-4 text-orange-500" />
-                  <span className="text-sm font-medium">{session.user.streakDays}</span>
+                  <span className="text-sm font-medium">{profile.streak_days}</span>
                 </div>
               )}
 
               {/* Points */}
               <div className="hidden items-center gap-1 rounded-full bg-primary/10 px-3 py-1 sm:flex">
                 <span className="text-sm font-semibold text-primary">
-                  {session.user.points?.toLocaleString() ?? 0}
+                  {profile.points.toLocaleString()}
                 </span>
                 <span className="text-xs text-muted-foreground">pts</span>
               </div>
@@ -121,27 +121,27 @@ export function Header() {
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" className="relative size-9 rounded-full">
                     <Avatar className="size-9">
-                      <AvatarImage src={session.user.image ?? ''} alt={session.user.name ?? ''} />
+                      <AvatarImage src={profile.avatar_url ?? ''} alt={profile.display_name ?? ''} />
                       <AvatarFallback>
-                        {session.user.name?.charAt(0).toUpperCase() ?? 'U'}
+                        {profile.display_name?.charAt(0).toUpperCase() ?? user.email?.charAt(0).toUpperCase() ?? 'U'}
                       </AvatarFallback>
                     </Avatar>
                     {/* Level Badge */}
                     <span className="absolute -bottom-1 -right-1 flex size-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
-                      {session.user.level ?? 1}
+                      {profile.level}
                     </span>
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56">
                   <div className="flex items-center gap-2 p-2">
                     <Avatar className="size-10">
-                      <AvatarImage src={session.user.image ?? ''} />
-                      <AvatarFallback>{session.user.name?.charAt(0)}</AvatarFallback>
+                      <AvatarImage src={profile.avatar_url ?? ''} />
+                      <AvatarFallback>{profile.display_name?.charAt(0) ?? 'U'}</AvatarFallback>
                     </Avatar>
                     <div className="flex flex-col">
-                      <span className="font-medium">{session.user.name}</span>
+                      <span className="font-medium">{profile.display_name ?? user.email}</span>
                       <span className="text-xs text-muted-foreground">
-                        Level {session.user.level ?? 1}
+                        Level {profile.level}
                       </span>
                     </div>
                   </div>
@@ -169,11 +169,11 @@ export function Header() {
                 </DropdownMenuContent>
               </DropdownMenu>
             </>
-          ) : (
+          ) : !loading ? (
             <Link href="/login">
               <Button>Sign In</Button>
             </Link>
-          )}
+          ) : null}
 
           {/* Mobile Menu */}
           <Sheet>

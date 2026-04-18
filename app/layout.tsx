@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import { Playfair_Display } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
-import { SessionProvider } from '@/components/providers/session-provider'
+import { AuthProvider } from '@/components/providers/auth-provider'
 import { Header } from '@/components/layout/header'
 import { MobileNav } from '@/components/layout/mobile-nav'
 import './globals.css'
@@ -82,13 +82,13 @@ export default function RootLayout({
       className={`${geist.variable} ${geistMono.variable} ${playfair.variable} bg-background`}
     >
       <body className="min-h-screen font-sans antialiased">
-        <SessionProvider>
+        <AuthProvider>
           <div className="relative flex min-h-screen flex-col">
             <Header />
             <main className="flex-1 pb-16 md:pb-0">{children}</main>
             <MobileNav />
           </div>
-        </SessionProvider>
+        </AuthProvider>
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>

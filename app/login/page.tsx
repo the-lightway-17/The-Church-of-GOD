@@ -1,16 +1,85 @@
 'use client'
 
-import { signIn } from 'next-auth/react'
-import { useSearchParams } from 'next/navigation'
-import { BookOpen, Github, Chrome } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
+import { useSearchParams, useRouter } from 'next/navigation'
+import { useState } from 'react'
+import { BookOpen, Github, Chrome, Mail } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { Spinner } from '@/components/ui/spinner'
 import { Suspense } from 'react'
 
 function LoginContent() {
   const searchParams = useSearchParams()
+  const router = useRouter()
   const callbackUrl = searchParams.get('callbackUrl') ?? '/'
   const error = searchParams.get('error')
+  
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [message, setMessage] = useState<{ type: 'error' | 'success'; text: string } | null>(null)
+
+  const supabase = createClient()
+
+  const handleOAuthSignIn = async (provider: 'google' | 'github') => {
+    setLoading(true)
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: {
+        redirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ?? 
+          `${window.location.origin}/auth/callback?next=${encodeURIComponent(callbackUrl)}`,
+      },
+    })
+    if (error) {
+      setMessage({ type: 'error', text: error.message })
+      setLoading(false)
+    }
+  }
+
+  const handleEmailSignIn = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+    setMessage(null)
+
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
+
+    if (error) {
+      setMessage({ type: 'error', text: error.message })
+      setLoading(false)
+    } else {
+      router.push(callbackUrl)
+      router.refresh()
+    }
+  }
+
+  const handleEmailSignUp = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+    setMessage(null)
+
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ?? 
+          `${window.location.origin}/auth/callback?next=${encodeURIComponent(callbackUrl)}`,
+      },
+    })
+
+    if (error) {
+      setMessage({ type: 'error', text: error.message })
+    } else {
+      setMessage({ type: 'success', text: 'Check your email for a confirmation link!' })
+    }
+    setLoading(false)
+  }
 
   return (
     <div className="container flex min-h-[calc(100vh-4rem)] items-center justify-center px-4">
@@ -25,44 +94,116 @@ function LoginContent() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {error && (
-            <div className="rounded-lg bg-destructive/10 p-3 text-center text-sm text-destructive">
-              {error === 'OAuthSignin' && 'Error starting authentication. Please try again.'}
-              {error === 'OAuthCallback' && 'Error during authentication. Please try again.'}
-              {error === 'OAuthAccountNotLinked' &&
-                'This email is already linked to another account.'}
-              {error === 'Default' && 'An error occurred. Please try again.'}
+          {(error || message) && (
+            <div className={`rounded-lg p-3 text-center text-sm ${
+              message?.type === 'success' 
+                ? 'bg-green-500/10 text-green-600' 
+                : 'bg-destructive/10 text-destructive'
+            }`}>
+              {message?.text || (error === 'OAuthSignin' && 'Error starting authentication. Please try again.') ||
+                (error === 'OAuthCallback' && 'Error during authentication. Please try again.') ||
+                (error === 'Default' && 'An error occurred. Please try again.')}
             </div>
           )}
 
-          <Button
-            variant="outline"
-            className="w-full gap-3 py-6"
-            onClick={() => signIn('google', { callbackUrl })}
-          >
-            <Chrome className="size-5" />
-            Continue with Google
-          </Button>
+          <div className="space-y-3">
+            <Button
+              variant="outline"
+              className="w-full gap-3 py-6"
+              onClick={() => handleOAuthSignIn('google')}
+              disabled={loading}
+            >
+              {loading ? <Spinner className="size-5" /> : <Chrome className="size-5" />}
+              Continue with Google
+            </Button>
 
-          <Button
-            variant="outline"
-            className="w-full gap-3 py-6"
-            onClick={() => signIn('github', { callbackUrl })}
-          >
-            <Github className="size-5" />
-            Continue with GitHub
-          </Button>
+            <Button
+              variant="outline"
+              className="w-full gap-3 py-6"
+              onClick={() => handleOAuthSignIn('github')}
+              disabled={loading}
+            >
+              {loading ? <Spinner className="size-5" /> : <Github className="size-5" />}
+              Continue with GitHub
+            </Button>
+          </div>
 
-          <Button
-            variant="outline"
-            className="w-full gap-3 py-6"
-            onClick={() => signIn('apple', { callbackUrl })}
-          >
-            <svg className="size-5" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701" />
-            </svg>
-            Continue with Apple
-          </Button>
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-card px-2 text-muted-foreground">Or continue with email</span>
+            </div>
+          </div>
+
+          <Tabs defaultValue="signin" className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="signin">Sign In</TabsTrigger>
+              <TabsTrigger value="signup">Sign Up</TabsTrigger>
+            </TabsList>
+            <TabsContent value="signin">
+              <form onSubmit={handleEmailSignIn} className="space-y-4">
+                <FieldGroup>
+                  <Field>
+                    <FieldLabel>Email</FieldLabel>
+                    <Input
+                      type="email"
+                      placeholder="you@example.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel>Password</FieldLabel>
+                    <Input
+                      type="password"
+                      placeholder="Your password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                    />
+                  </Field>
+                </FieldGroup>
+                <Button type="submit" className="w-full gap-2" disabled={loading}>
+                  {loading ? <Spinner className="size-4" /> : <Mail className="size-4" />}
+                  Sign In
+                </Button>
+              </form>
+            </TabsContent>
+            <TabsContent value="signup">
+              <form onSubmit={handleEmailSignUp} className="space-y-4">
+                <FieldGroup>
+                  <Field>
+                    <FieldLabel>Email</FieldLabel>
+                    <Input
+                      type="email"
+                      placeholder="you@example.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel>Password</FieldLabel>
+                    <Input
+                      type="password"
+                      placeholder="Create a password (min 6 characters)"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      minLength={6}
+                      required
+                    />
+                  </Field>
+                </FieldGroup>
+                <Button type="submit" className="w-full gap-2" disabled={loading}>
+                  {loading ? <Spinner className="size-4" /> : <Mail className="size-4" />}
+                  Create Account
+                </Button>
+              </form>
+            </TabsContent>
+          </Tabs>
 
           <p className="text-center text-xs text-muted-foreground">
             By signing in, you agree to our Terms of Service and Privacy Policy

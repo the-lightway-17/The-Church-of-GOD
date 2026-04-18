@@ -1,117 +1,111 @@
-import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
-import dbConnect from "@/lib/db"
-import Question from "@/lib/models/question"
-import User from "@/lib/models/user"
-import { awardPoints, checkAndAwardBadges } from "@/lib/gamification"
-import { POINT_VALUES } from "@/lib/constants/points"
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
 
 export async function GET(request: NextRequest) {
-  try {
-    await dbConnect()
-
-    const searchParams = request.nextUrl.searchParams
-    const page = parseInt(searchParams.get("page") || "1")
-    const limit = parseInt(searchParams.get("limit") || "10")
-    const sort = searchParams.get("sort") || "recent"
-    const tag = searchParams.get("tag")
-    const book = searchParams.get("book")
-    const status = searchParams.get("status")
-
-    // Build query
-    const query: Record<string, unknown> = {}
-    if (tag) query.tags = tag
-    if (book) query.bibleBook = book
-    if (status === "answered") query.isAnswered = true
-    if (status === "unanswered") query.isAnswered = false
-
-    // Build sort
-    let sortQuery: Record<string, 1 | -1> = { createdAt: -1 }
-    if (sort === "popular") sortQuery = { voteCount: -1, createdAt: -1 }
-    if (sort === "trending") sortQuery = { viewCount: -1, createdAt: -1 }
-    if (sort === "unanswered") {
-      query.isAnswered = false
-      sortQuery = { createdAt: -1 }
-    }
-
-    const skip = (page - 1) * limit
-
-    const [questions, total] = await Promise.all([
-      Question.find(query)
-        .sort(sortQuery)
-        .skip(skip)
-        .limit(limit)
-        .populate("author", "name image level")
-        .lean(),
-      Question.countDocuments(query),
-    ])
-
-    return NextResponse.json({
-      questions,
-      pagination: {
-        page,
-        limit,
-        total,
-        pages: Math.ceil(total / limit),
-      },
-    })
-  } catch (error) {
-    console.error("Error fetching questions:", error)
-    return NextResponse.json(
-      { error: "Failed to fetch questions" },
-      { status: 500 }
-    )
+  const supabase = await createClient()
+  const { searchParams } = new URL(request.url)
+  
+  const page = parseInt(searchParams.get('page') ?? '1')
+  const limit = parseInt(searchParams.get('limit') ?? '10')
+  const sort = searchParams.get('sort') ?? 'recent'
+  const tag = searchParams.get('tag')
+  const status = searchParams.get('status')
+  
+  const offset = (page - 1) * limit
+  
+  let query = supabase
+    .from('questions')
+    .select(`
+      *,
+      author:profiles!questions_user_id_fkey(id, display_name, avatar_url, level, points)
+    `, { count: 'exact' })
+  
+  if (tag) {
+    query = query.contains('tags', [tag])
   }
+  
+  if (status === 'answered') {
+    query = query.eq('is_answered', true)
+  } else if (status === 'unanswered') {
+    query = query.eq('is_answered', false)
+  }
+  
+  switch (sort) {
+    case 'popular':
+      query = query.order('vote_count', { ascending: false })
+      break
+    case 'trending':
+      query = query.order('view_count', { ascending: false })
+      break
+    case 'unanswered':
+      query = query.eq('is_answered', false).order('created_at', { ascending: false })
+      break
+    case 'recent':
+    default:
+      query = query.order('created_at', { ascending: false })
+  }
+  
+  const { data: questions, error, count } = await query
+    .range(offset, offset + limit - 1)
+  
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+  
+  return NextResponse.json({
+    questions,
+    pagination: {
+      page,
+      limit,
+      total: count ?? 0,
+      pages: Math.ceil((count ?? 0) / limit),
+    },
+  })
 }
 
 export async function POST(request: NextRequest) {
-  try {
-    const session = await auth()
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
-    await dbConnect()
-
-    const body = await request.json()
-    const { title, content, tags, bibleReference, bibleBook, bibleChapter, bibleVerse } = body
-
-    if (!title || !content) {
-      return NextResponse.json(
-        { error: "Title and content are required" },
-        { status: 400 }
-      )
-    }
-
-    // Create question
-    const question = await Question.create({
+  const supabase = await createClient()
+  
+  const { data: { user } } = await supabase.auth.getUser()
+  
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+  
+  const body = await request.json()
+  const { title, content, tags, bible_references } = body
+  
+  if (!title || !content) {
+    return NextResponse.json({ error: 'Title and content are required' }, { status: 400 })
+  }
+  
+  const { data: question, error } = await supabase
+    .from('questions')
+    .insert({
+      user_id: user.id,
       title,
       content,
-      author: session.user.id,
-      tags: tags || [],
-      bibleReference,
-      bibleBook,
-      bibleChapter,
-      bibleVerse,
+      tags: tags ?? [],
+      bible_references: bible_references ?? [],
     })
-
-    // Award points for asking a question
-    await awardPoints(session.user.id, "askQuestion")
-
-    // Increment user's question count
-    await User.findByIdAndUpdate(session.user.id, {
-      $inc: { questionCount: 1 },
-    })
-
-    // Check for badges
-    await checkAndAwardBadges(session.user.id)
-
-    return NextResponse.json({ question }, { status: 201 })
-  } catch (error) {
-    console.error("Error creating question:", error)
-    return NextResponse.json(
-      { error: "Failed to create question" },
-      { status: 500 }
-    )
+    .select(`
+      *,
+      author:profiles!questions_user_id_fkey(id, display_name, avatar_url, level, points)
+    `)
+    .single()
+  
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
   }
+  
+  // Update user's questions count and points
+  await supabase
+    .from('profiles')
+    .update({ 
+      questions_count: supabase.sql`questions_count + 1`,
+      points: supabase.sql`points + 5`
+    })
+    .eq('id', user.id)
+  
+  return NextResponse.json({ question }, { status: 201 })
 }

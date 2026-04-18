@@ -1,112 +1,101 @@
-import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
-import dbConnect from "@/lib/db"
-import Group from "@/lib/models/group"
-import User from "@/lib/models/user"
-import { awardPoints, checkAndAwardBadges } from "@/lib/gamification"
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
 
 export async function GET(request: NextRequest) {
-  try {
-    await dbConnect()
+  const supabase = await createClient()
+  const { searchParams } = new URL(request.url)
 
-    const searchParams = request.nextUrl.searchParams
-    const page = parseInt(searchParams.get("page") || "1")
-    const limit = parseInt(searchParams.get("limit") || "12")
-    const category = searchParams.get("category")
-    const search = searchParams.get("search")
-    const sort = searchParams.get("sort") || "popular"
+  const page = parseInt(searchParams.get('page') ?? '1')
+  const limit = parseInt(searchParams.get('limit') ?? '12')
+  const search = searchParams.get('search')
+  const sort = searchParams.get('sort') ?? 'popular'
+  const offset = (page - 1) * limit
 
-    // Build query
-    const query: Record<string, unknown> = { isPrivate: false }
-    if (category && category !== "all") query.category = category
-    if (search) {
-      query.$or = [
-        { name: { $regex: search, $options: "i" } },
-        { description: { $regex: search, $options: "i" } },
-        { tags: { $regex: search, $options: "i" } },
-      ]
-    }
+  let query = supabase
+    .from('groups')
+    .select(`
+      *,
+      owner:profiles!groups_owner_id_fkey(id, display_name, avatar_url)
+    `, { count: 'exact' })
+    .eq('is_private', false)
 
-    // Build sort
-    let sortQuery: Record<string, 1 | -1> = { memberCount: -1 }
-    if (sort === "recent") sortQuery = { createdAt: -1 }
-    if (sort === "active") sortQuery = { lastActivity: -1 }
-
-    const skip = (page - 1) * limit
-
-    const [groups, total] = await Promise.all([
-      Group.find(query)
-        .sort(sortQuery)
-        .skip(skip)
-        .limit(limit)
-        .populate("createdBy", "name image")
-        .lean(),
-      Group.countDocuments(query),
-    ])
-
-    return NextResponse.json({
-      groups,
-      pagination: {
-        page,
-        limit,
-        total,
-        pages: Math.ceil(total / limit),
-      },
-    })
-  } catch (error) {
-    console.error("Error fetching groups:", error)
-    return NextResponse.json(
-      { error: "Failed to fetch groups" },
-      { status: 500 }
-    )
+  if (search) {
+    query = query.or(`name.ilike.%${search}%,description.ilike.%${search}%`)
   }
+
+  switch (sort) {
+    case 'recent':
+      query = query.order('created_at', { ascending: false })
+      break
+    case 'popular':
+    default:
+      query = query.order('member_count', { ascending: false })
+  }
+
+  const { data: groups, error, count } = await query
+    .range(offset, offset + limit - 1)
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  return NextResponse.json({
+    groups,
+    pagination: {
+      page,
+      limit,
+      total: count ?? 0,
+      pages: Math.ceil((count ?? 0) / limit),
+    },
+  })
 }
 
 export async function POST(request: NextRequest) {
-  try {
-    const session = await auth()
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
+  const supabase = await createClient()
 
-    await dbConnect()
+  const { data: { user } } = await supabase.auth.getUser()
 
-    const body = await request.json()
-    const { name, description, category, isPrivate, tags, guidelines } = body
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
 
-    if (!name || !description || !category) {
-      return NextResponse.json(
-        { error: "Name, description, and category are required" },
-        { status: 400 }
-      )
-    }
+  const body = await request.json()
+  const { name, description, is_private, tags } = body
 
-    // Create group
-    const group = await Group.create({
+  if (!name || !description) {
+    return NextResponse.json({ error: 'Name and description are required' }, { status: 400 })
+  }
+
+  // Create group
+  const { data: group, error } = await supabase
+    .from('groups')
+    .insert({
       name,
       description,
-      category,
-      isPrivate: isPrivate || false,
-      tags: tags || [],
-      guidelines: guidelines || [],
-      createdBy: session.user.id,
-      admins: [session.user.id],
-      members: [session.user.id],
-      memberCount: 1,
+      is_private: is_private ?? false,
+      tags: tags ?? [],
+      owner_id: user.id,
+      member_count: 1,
     })
+    .select()
+    .single()
 
-    // Award points for creating a group
-    await awardPoints(session.user.id, "createGroup")
-
-    // Check for badges
-    await checkAndAwardBadges(session.user.id)
-
-    return NextResponse.json({ group }, { status: 201 })
-  } catch (error) {
-    console.error("Error creating group:", error)
-    return NextResponse.json(
-      { error: "Failed to create group" },
-      { status: 500 }
-    )
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
   }
+
+  // Add creator as owner member
+  await supabase.from('group_members').insert({
+    group_id: group.id,
+    user_id: user.id,
+    role: 'owner',
+  })
+
+  // Award points for creating a group
+  await supabase
+    .from('profiles')
+    .update({ points: supabase.sql`points + 15` })
+    .eq('id', user.id)
+
+  return NextResponse.json({ group }, { status: 201 })
 }

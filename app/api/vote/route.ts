@@ -1,118 +1,109 @@
-import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
-import dbConnect from "@/lib/db"
-import Question from "@/lib/models/question"
-import Answer from "@/lib/models/answer"
-import User from "@/lib/models/user"
-import { awardPoints } from "@/lib/gamification"
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
 
 export async function POST(request: NextRequest) {
-  try {
-    const session = await auth()
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
+  const supabase = await createClient()
 
-    await dbConnect()
+  const { data: { user } } = await supabase.auth.getUser()
 
-    const body = await request.json()
-    const { targetId, targetType, voteType } = body
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
 
-    if (!targetId || !targetType || !voteType) {
-      return NextResponse.json(
-        { error: "Missing required fields" },
-        { status: 400 }
-      )
-    }
+  const body = await request.json()
+  const { target_id, target_type, vote_type } = body
 
-    if (!["question", "answer"].includes(targetType)) {
-      return NextResponse.json(
-        { error: "Invalid target type" },
-        { status: 400 }
-      )
-    }
+  if (!target_id || !target_type || !vote_type) {
+    return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+  }
 
-    if (!["up", "down"].includes(voteType)) {
-      return NextResponse.json(
-        { error: "Invalid vote type" },
-        { status: 400 }
-      )
-    }
+  if (!['question', 'answer'].includes(target_type)) {
+    return NextResponse.json({ error: 'Invalid target type' }, { status: 400 })
+  }
 
-    const Model = targetType === "question" ? Question : Answer
-    const target = await Model.findById(targetId)
+  if (!['up', 'down'].includes(vote_type)) {
+    return NextResponse.json({ error: 'Invalid vote type' }, { status: 400 })
+  }
 
-    if (!target) {
-      return NextResponse.json(
-        { error: `${targetType} not found` },
-        { status: 404 }
-      )
-    }
+  const voteValue = vote_type === 'up' ? 1 : -1
+  const targetColumn = target_type === 'question' ? 'question_id' : 'answer_id'
 
-    // Check if user has already voted
-    const existingUpvote = target.upvotes?.includes(session.user.id)
-    const existingDownvote = target.downvotes?.includes(session.user.id)
+  // Check for existing vote
+  const { data: existingVote } = await supabase
+    .from('votes')
+    .select('*')
+    .eq('user_id', user.id)
+    .eq(targetColumn, target_id)
+    .single()
 
-    let voteChange = 0
+  let voteChange = 0
+  let currentUserVote: 'up' | 'down' | null = null
 
-    if (voteType === "up") {
-      if (existingUpvote) {
-        // Remove upvote
-        target.upvotes = target.upvotes.filter(
-          (id: string) => id.toString() !== session.user.id
-        )
-        voteChange = -1
-      } else {
-        // Add upvote, remove downvote if exists
-        if (existingDownvote) {
-          target.downvotes = target.downvotes.filter(
-            (id: string) => id.toString() !== session.user.id
-          )
-          voteChange = 2 // +1 for removing downvote, +1 for adding upvote
-        } else {
-          voteChange = 1
-        }
-        target.upvotes.push(session.user.id)
-
-        // Award points to the content author for receiving an upvote
-        if (target.author.toString() !== session.user.id) {
-          await awardPoints(target.author.toString(), "receiveUpvote")
-        }
-      }
+  if (existingVote) {
+    if (existingVote.vote_type === voteValue) {
+      // Remove vote (toggle off)
+      await supabase
+        .from('votes')
+        .delete()
+        .eq('id', existingVote.id)
+      
+      voteChange = -voteValue
+      currentUserVote = null
     } else {
-      if (existingDownvote) {
-        // Remove downvote
-        target.downvotes = target.downvotes.filter(
-          (id: string) => id.toString() !== session.user.id
-        )
-        voteChange = 1
-      } else {
-        // Add downvote, remove upvote if exists
-        if (existingUpvote) {
-          target.upvotes = target.upvotes.filter(
-            (id: string) => id.toString() !== session.user.id
-          )
-          voteChange = -2
-        } else {
-          voteChange = -1
-        }
-        target.downvotes.push(session.user.id)
-      }
+      // Change vote direction
+      await supabase
+        .from('votes')
+        .update({ vote_type: voteValue })
+        .eq('id', existingVote.id)
+      
+      voteChange = voteValue * 2 // Going from -1 to +1 is a change of 2
+      currentUserVote = vote_type as 'up' | 'down'
     }
+  } else {
+    // Create new vote
+    await supabase
+      .from('votes')
+      .insert({
+        user_id: user.id,
+        [targetColumn]: target_id,
+        vote_type: voteValue,
+      })
+    
+    voteChange = voteValue
+    currentUserVote = vote_type as 'up' | 'down'
+  }
 
-    target.voteCount = (target.voteCount || 0) + voteChange
-    await target.save()
+  // Update the target's vote count
+  const targetTable = target_type === 'question' ? 'questions' : 'answers'
+  
+  // Get current vote count and update
+  const { data: target } = await supabase
+    .from(targetTable)
+    .select('vote_count, user_id')
+    .eq('id', target_id)
+    .single()
+
+  if (target) {
+    const newVoteCount = (target.vote_count || 0) + voteChange
+    
+    await supabase
+      .from(targetTable)
+      .update({ vote_count: newVoteCount })
+      .eq('id', target_id)
+
+    // Award points to content author for upvotes
+    if (voteChange > 0 && target.user_id !== user.id) {
+      await supabase
+        .from('profiles')
+        .update({ points: supabase.sql`points + 2` })
+        .eq('id', target.user_id)
+    }
 
     return NextResponse.json({
-      voteCount: target.voteCount,
-      userVote: target.upvotes?.includes(session.user.id)
-        ? "up"
-        : target.downvotes?.includes(session.user.id)
-        ? "down"
-        : null,
+      vote_count: newVoteCount,
+      user_vote: currentUserVote,
     })
-  } catch (error) {
-    console.error("Error voting:", error)
-    return NextResponse.json({ error: "Failed to vote" }, { status: 500 })
   }
+
+  return NextResponse.json({ error: 'Target not found' }, { status: 404 })
 }
