@@ -3,7 +3,7 @@
 import { useState } from "react"
 import Link from "next/link"
 import { useParams } from "next/navigation"
-import { useSession } from "next-auth/react"
+import { useAuth } from "@/components/providers/auth-provider"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -190,7 +190,7 @@ function DiscussionCard({ discussion }: { discussion: typeof mockDiscussions[0] 
 
 export default function GroupDetailPage() {
   const params = useParams()
-  const { data: session } = useSession()
+  const { user } = useAuth()
   const [isJoined, setIsJoined] = useState(false)
   const [isNotifying, setIsNotifying] = useState(true)
   const [newDiscussionTitle, setNewDiscussionTitle] = useState("")

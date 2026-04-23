@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { useSession } from 'next-auth/react'
+import { useAuth } from '@/components/providers/auth-provider'
 import Link from 'next/link'
 import { BookOpen, Send, X, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -16,7 +16,7 @@ interface AnswerFormProps {
 }
 
 export function AnswerForm({ questionId }: AnswerFormProps) {
-  const { data: session } = useSession()
+  const { user } = useAuth()
   const [content, setContent] = useState('')
   const [bibleReference, setBibleReference] = useState('')
   const [bibleReferences, setBibleReferences] = useState<string[]>([])
@@ -35,7 +35,7 @@ export function AnswerForm({ questionId }: AnswerFormProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!content.trim() || !session) return
+    if (!content.trim() || !user) return
 
     setIsSubmitting(true)
     
@@ -54,7 +54,7 @@ export function AnswerForm({ questionId }: AnswerFormProps) {
     setBibleReferences([])
   }
 
-  if (!session) {
+  if (!user) {
     return (
       <Card>
         <CardContent className="py-8 text-center">

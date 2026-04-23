@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { useSession } from 'next-auth/react'
+import { useAuth } from '@/components/providers/auth-provider'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { BookOpen, X, Plus, Send, Lightbulb, ArrowLeft } from 'lucide-react'
@@ -33,7 +33,7 @@ const SUGGESTED_TAGS = [
 ]
 
 export default function NewQuestionPage() {
-  const { data: session, status } = useSession()
+  const { user, loading } = useAuth()
   const router = useRouter()
   
   const [title, setTitle] = useState('')
@@ -70,7 +70,7 @@ export default function NewQuestionPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!title.trim() || !content.trim() || !category || !session) return
+    if (!title.trim() || !content.trim() || !category || !user) return
 
     setIsSubmitting(true)
     
@@ -90,7 +90,7 @@ export default function NewQuestionPage() {
     router.push('/questions')
   }
 
-  if (status === 'loading') {
+  if (loading) {
     return (
       <div className="container flex items-center justify-center px-4 py-16">
         <div className="animate-pulse text-muted-foreground">Loading...</div>
@@ -98,7 +98,7 @@ export default function NewQuestionPage() {
     )
   }
 
-  if (!session) {
+  if (!user) {
     return (
       <div className="container flex items-center justify-center px-4 py-16">
         <Card className="w-full max-w-md text-center">

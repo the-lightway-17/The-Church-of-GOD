@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { useSession } from "next-auth/react"
+import { useAuth } from "@/components/providers/auth-provider"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -197,7 +197,7 @@ function GroupCard({ group }: { group: typeof mockGroups[0] }) {
 }
 
 export default function GroupsPage() {
-  const { data: session } = useSession()
+  const { user } = useAuth()
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCategory, setSelectedCategory] = useState("all")
   const [activeTab, setActiveTab] = useState("discover")
@@ -288,7 +288,7 @@ export default function GroupsPage() {
           </TabsContent>
 
           <TabsContent value="my-groups" className="mt-6">
-            {session ? (
+            {user ? (
               <div className="text-center py-12">
                 <Users className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                 <h3 className="text-lg font-medium text-foreground mb-2">
