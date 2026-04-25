@@ -26,26 +26,7 @@ export const metadata = {
   description: 'View and manage your profile',
 }
 
-// Sample user data - in production, this would come from the database
-const SAMPLE_USER = {
-  id: 'current-user',
-  name: 'John Doe',
-  email: 'john@example.com',
-  image: null,
-  bio: 'Passionate about studying Scripture and growing in faith. Love connecting with fellow believers.',
-  points: 1250,
-  level: 5,
-  streakDays: 7,
-  questionsAsked: 12,
-  answersGiven: 28,
-  acceptedAnswers: 8,
-  followers: 45,
-  following: 32,
-  groups: 3,
-  savedQuestions: 15,
-  badges: ['First Steps', 'Helping Hand', 'Faithful'],
-  joinedAt: new Date('2024-01-15'),
-}
+
 
 const SAMPLE_ACTIVITY = [
   {
@@ -93,18 +74,28 @@ function formatTimeAgo(date: Date): string {
 export default async function ProfilePage() {
   const session = await auth()
 
-  if (!session) {
+  if (!session || !session.profile) {
     redirect('/login?callbackUrl=/profile')
   }
 
   const user = {
-    ...SAMPLE_USER,
-    name: session.user.name ?? SAMPLE_USER.name,
-    email: session.user.email ?? SAMPLE_USER.email,
-    image: session.user.image ?? SAMPLE_USER.image,
-    points: session.user.points ?? SAMPLE_USER.points,
-    level: session.user.level ?? SAMPLE_USER.level,
-    streakDays: session.user.streakDays ?? SAMPLE_USER.streakDays,
+    id: session.user.id,
+    name: session.profile.display_name || 'User',
+    email: session.user.email,
+    image: session.profile.avatar_url,
+    bio: session.profile.bio || 'No bio yet. Add one in your profile settings.',
+    points: session.profile.total_points || 0,
+    level: session.profile.level || 1,
+    streakDays: session.profile.streak_days || 0,
+    questionsAsked: session.profile.questions_count || 0,
+    answersGiven: session.profile.answers_count || 0,
+    acceptedAnswers: session.profile.helpful_count || 0,
+    followers: 0,
+    following: 0,
+    groups: session.profile.groups_joined || 0,
+    savedQuestions: 0,
+    badges: session.profile.badges || [],
+    joinedAt: session.profile.created_at ? new Date(session.profile.created_at) : new Date(),
   }
 
   const levelProgress = getLevelProgress(user.points)

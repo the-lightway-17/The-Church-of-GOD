@@ -32,13 +32,26 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Update or insert profile
+    // Update or insert profile with all stat defaults
     const { data, error } = await supabase
       .from('profiles')
       .upsert({
         id: user.id,
+        email: user.email,
         display_name: display_name.trim(),
         bio: bio || null,
+        level: 1,
+        streak_days: 0,
+        total_points: 0,
+        questions_count: 0,
+        answers_count: 0,
+        comments_count: 0,
+        helpful_count: 0,
+        games_played: 0,
+        games_won: 0,
+        game_score: 0,
+        badges: [],
+        groups_joined: 0,
         updated_at: new Date().toISOString(),
       }, {
         onConflict: 'id'
