@@ -4,6 +4,12 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
+  /* Daily theme colors - set by JavaScript */
+  --daily-primary: #EA8C55;
+  --daily-secondary: #C75146;
+  --daily-accent: #AD2E24;
+  --daily-dark: #81171B;
+  --daily-darker: #540804;
   /* Scripture Connect - Warm spiritual theme */
   /* Primary: Deep forest green (wisdom, growth) */
   /* Accent: Warm gold (spiritual light) */
@@ -198,4 +204,79 @@
   ::-webkit-scrollbar-thumb:hover {
     background: var(--muted-foreground);
   }
+}
+
+/* Layout variations */
+[data-layout="centered"] {
+  --layout-direction: column;
+  --layout-align: center;
+  --layout-justify: center;
+}
+
+[data-layout="hero"] {
+  --layout-direction: column;
+  --layout-align: center;
+  --layout-justify: flex-start;
+}
+
+[data-layout="grid"] {
+  --layout-direction: row;
+  --layout-align: stretch;
+  --layout-justify: space-around;
+}
+
+[data-layout="sidebar"] {
+  --layout-direction: row;
+  --layout-align: flex-start;
+  --layout-justify: space-between;
+}
+
+[data-layout="card-grid"] {
+  --layout-direction: row;
+  --layout-align: center;
+  --layout-justify: space-around;
+  flex-wrap: wrap;
+}
+
+[data-layout="minimal"] {
+  --layout-direction: column;
+  --layout-align: center;
+  --layout-justify: center;
+}
+
+[data-layout="split"] {
+  --layout-direction: row;
+  --layout-align: center;
+  --layout-justify: space-between;
+}
+
+/* Dynamic color support - colors applied by JS */
+html {
+  --daily-primary: #EA8C55;
+  --daily-secondary: #C75146;
+  --daily-accent: #AD2E24;
+  --daily-dark: #81171B;
+  --daily-darker: #540804;
+}
+
+/* Button variant with daily colors */
+.btn-daily-primary {
+  background-color: var(--daily-primary);
+  color: white;
+}
+
+.btn-daily-primary:hover {
+  opacity: 0.9;
+}
+
+.bg-daily-primary {
+  background-color: var(--daily-primary);
+}
+
+.text-daily-primary {
+  color: var(--daily-primary);
+}
+
+.border-daily-primary {
+  border-color: var(--daily-primary);
 }

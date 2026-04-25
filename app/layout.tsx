@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from 'next/font/google'
 import { Playfair_Display } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { AuthProvider } from '@/components/providers/auth-provider'
+import { ThemeProvider } from '@/components/providers/theme-provider'
 import { Header } from '@/components/layout/header'
 import { MobileNav } from '@/components/layout/mobile-nav'
 import './globals.css'
@@ -24,11 +25,11 @@ const playfair = Playfair_Display({
 
 export const metadata: Metadata = {
   title: {
-    default: 'Scripture Connect - Bible Study Community',
-    template: '%s | Scripture Connect',
+    default: 'Christ Mission - Striving to Know the Father',
+    template: '%s | Christ Mission',
   },
   description:
-    'Join a vibrant community of believers. Ask questions, share insights, earn badges, and grow in your faith together.',
+    'Join a vibrant community of believers seeking to know God the Father. Ask questions, share insights, earn badges, and grow in your faith together.',
   keywords: [
     'Bible study',
     'Christian community',
@@ -37,19 +38,20 @@ export const metadata: Metadata = {
     'Q&A',
     'Bible questions',
     'Spiritual growth',
+    'Know the Father',
   ],
-  authors: [{ name: 'Scripture Connect' }],
+  authors: [{ name: 'Christ Mission' }],
   openGraph: {
     type: 'website',
     locale: 'en_US',
-    siteName: 'Scripture Connect',
-    title: 'Scripture Connect - Bible Study Community',
-    description: 'Join a vibrant community of believers exploring Scripture together.',
+    siteName: 'Christ Mission',
+    title: 'Christ Mission - Striving to Know the Father',
+    description: 'Join a vibrant community of believers seeking to know God the Father.',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Scripture Connect',
-    description: 'Join a vibrant community of believers exploring Scripture together.',
+    title: 'Christ Mission',
+    description: 'Join a vibrant community of believers seeking to know God the Father.',
   },
   icons: {
     icon: [
@@ -82,13 +84,15 @@ export default function RootLayout({
       className={`${geist.variable} ${geistMono.variable} ${playfair.variable} bg-background`}
     >
       <body className="min-h-screen font-sans antialiased">
-        <AuthProvider>
-          <div className="relative flex min-h-screen flex-col">
-            <Header />
-            <main className="flex-1 pb-16 md:pb-0">{children}</main>
-            <MobileNav />
-          </div>
-        </AuthProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <div className="relative flex min-h-screen flex-col">
+              <Header />
+              <main className="flex-1 pb-16 md:pb-0">{children}</main>
+              <MobileNav />
+            </div>
+          </AuthProvider>
+        </ThemeProvider>
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>

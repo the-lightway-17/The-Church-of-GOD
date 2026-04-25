@@ -50,7 +50,7 @@ export function Header() {
             <BookOpen className="size-5 text-primary-foreground" />
           </div>
           <span className="hidden font-serif text-xl font-semibold sm:inline-block">
-            Scripture Connect
+            Christ Mission
           </span>
         </Link>
 

@@ -12,7 +12,7 @@ export function UnauthenticatedLanding() {
         <div className="container mx-auto flex h-16 items-center justify-between px-4">
           <Link href="/" className="flex items-center gap-2 font-serif text-2xl font-bold text-primary">
             <BookOpen className="size-6" />
-            Scripture Connect
+            Christ Mission
           </Link>
           <div className="flex items-center gap-4">
             <Link href="/login">
@@ -137,7 +137,7 @@ export function UnauthenticatedLanding() {
       {/* Footer */}
       <footer className="border-t bg-muted/50 px-4 py-8 sm:py-12">
         <div className="mx-auto max-w-6xl text-center text-sm text-muted-foreground">
-          <p>&copy; 2024 Scripture Connect. All rights reserved.</p>
+          <p>&copy; 2024 Christ Mission. All rights reserved.</p>
         </div>
       </footer>
     </div>

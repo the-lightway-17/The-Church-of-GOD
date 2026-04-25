@@ -86,9 +86,9 @@ function LoginContent() {
           <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-2xl bg-primary">
             <BookOpen className="size-8 text-primary-foreground" />
           </div>
-          <CardTitle className="font-serif text-3xl">Scripture Connect</CardTitle>
+          <CardTitle className="font-serif text-3xl">Christ Mission</CardTitle>
           <CardDescription className="mt-2 text-base">
-            Join our community of believers exploring Scripture together
+            Striving to Know the Father - Join our community of believers
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

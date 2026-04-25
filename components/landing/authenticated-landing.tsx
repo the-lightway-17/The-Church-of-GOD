@@ -26,12 +26,17 @@ export function AuthenticatedLanding({ session }: AuthenticatedLandingProps) {
   const firstName = session.user.name?.split(' ')[0] || 'there'
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center px-4 py-12 sm:py-16">
+    <div 
+      className="flex min-h-screen flex-col items-center justify-center px-4 py-12 sm:py-16"
+      style={{
+        background: `linear-gradient(135deg, color-mix(in srgb, var(--daily-primary) 10%, transparent) 0%, color-mix(in srgb, var(--daily-accent) 10%, transparent) 100%)`,
+      }}
+    >
       <div className="w-full max-w-3xl space-y-12">
         {/* Welcome Message */}
         <div className="text-center space-y-3">
           <h1 className="text-5xl sm:text-6xl font-bold font-serif text-foreground text-balance">
-            Welcome, {firstName}!
+            Welcome, <span style={{ color: 'var(--daily-primary)' }}>{firstName}</span>!
           </h1>
           <p className="text-xl sm:text-2xl text-muted-foreground text-pretty">
             What question do you have in mind today?
@@ -46,13 +51,23 @@ export function AuthenticatedLanding({ session }: AuthenticatedLandingProps) {
               placeholder="Ask about Scripture, theology, faith, Bible stories..."
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
-              className="w-full rounded-lg border-2 bg-card px-5 py-4 text-lg shadow-sm transition-all hover:shadow-md focus:shadow-md focus:border-primary"
+              className="w-full rounded-lg border-2 bg-card px-5 py-4 text-lg shadow-sm transition-all hover:shadow-md focus:shadow-md"
+              style={{
+                borderColor: 'var(--daily-primary)',
+              }}
             />
             <Button
               type="submit"
               size="icon"
-              className="absolute right-2 top-1/2 -translate-y-1/2"
               disabled={!question.trim()}
+              style={{
+                position: 'absolute',
+                right: '8px',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                backgroundColor: 'var(--daily-primary)',
+                color: 'white',
+              }}
             >
               <Send className="size-5" />
             </Button>
