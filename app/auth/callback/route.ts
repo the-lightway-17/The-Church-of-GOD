@@ -9,7 +9,25 @@ export async function GET(request: NextRequest) {
   if (code) {
     const supabase = await createClient()
     const { error } = await supabase.auth.exchangeCodeForSession(code)
+    
     if (!error) {
+      // Get the user to check if they need onboarding
+      const { data: { user } } = await supabase.auth.getUser()
+      
+      if (user) {
+        // Check if user has a display_name
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('display_name')
+          .eq('id', user.id)
+          .single()
+
+        // If no display_name, redirect to onboarding
+        if (!profile?.display_name) {
+          return NextResponse.redirect(`${origin}/onboarding`)
+        }
+      }
+
       return NextResponse.redirect(`${origin}${next}`)
     }
   }

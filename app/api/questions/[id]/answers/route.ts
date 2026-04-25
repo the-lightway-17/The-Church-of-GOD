@@ -1,124 +1,156 @@
-import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { NextRequest, NextResponse } from 'next/server'
 
+// GET answers for a question
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const supabase = await createClient()
-  const { id } = await params
-  const { searchParams } = new URL(request.url)
-  const sort = searchParams.get('sort') ?? 'votes'
+  try {
+    const supabase = await createClient()
+    const { id } = await params
+    const { searchParams } = request.nextUrl
+    const sort = searchParams.get('sort') || 'helpful'
 
-  let query = supabase
-    .from('answers')
-    .select(`
-      *,
-      author:profiles!answers_user_id_fkey(id, display_name, avatar_url, level, points)
-    `)
-    .eq('question_id', id)
+    let query = supabase
+      .from('answers')
+      .select(
+        `
+        id,
+        content,
+        is_accepted,
+        vote_count,
+        created_at,
+        updated_at,
+        author:profiles(id, display_name, bio),
+        comments(
+          id,
+          content,
+          created_at,
+          author:profiles(id, display_name)
+        )
+        `
+      )
+      .eq('question_id', id)
 
-  switch (sort) {
-    case 'recent':
-      query = query.order('created_at', { ascending: false })
-      break
-    case 'oldest':
-      query = query.order('created_at', { ascending: true })
-      break
-    case 'votes':
-    default:
-      query = query.order('vote_count', { ascending: false }).order('created_at', { ascending: false })
+    switch (sort) {
+      case 'recent':
+        query = query.order('created_at', { ascending: false })
+        break
+      case 'oldest':
+        query = query.order('created_at', { ascending: true })
+        break
+      case 'helpful':
+      default:
+        query = query.order('is_accepted', { ascending: false }).order('vote_count', { ascending: false })
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    return NextResponse.json({ data })
+  } catch (error) {
+    console.error('API error:', error)
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    )
   }
-
-  const { data: answers, error } = await query
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
-  }
-
-  return NextResponse.json({ answers })
 }
 
+// POST create answer
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const supabase = await createClient()
-  const { id } = await params
+  try {
+    const supabase = await createClient()
+    const { id } = await params
 
-  const { data: { user } } = await supabase.auth.getUser()
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
 
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (userError || !user) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
+
+    // Check if user has display_name
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('display_name')
+      .eq('id', user.id)
+      .single()
+
+    if (!profile?.display_name) {
+      return NextResponse.json(
+        { error: 'Please complete your profile first' },
+        { status: 403 }
+      )
+    }
+
+    // Verify question exists
+    const { data: question } = await supabase
+      .from('questions')
+      .select('id, author_id')
+      .eq('id', id)
+      .single()
+
+    if (!question) {
+      return NextResponse.json(
+        { error: 'Question not found' },
+        { status: 404 }
+      )
+    }
+
+    const body = await request.json()
+    const { content } = body
+
+    // Validate input
+    if (!content || typeof content !== 'string' || content.trim().length === 0) {
+      return NextResponse.json(
+        { error: 'Answer content is required' },
+        { status: 400 }
+      )
+    }
+
+    // Create answer
+    const { data, error } = await supabase
+      .from('answers')
+      .insert({
+        question_id: id,
+        author_id: user.id,
+        content: content.trim(),
+      })
+      .select(
+        `
+        id,
+        content,
+        is_accepted,
+        created_at,
+        author:profiles(id, display_name, bio)
+        `
+      )
+      .single()
+
+    if (error) {
+      console.error('Answer creation error:', error)
+      return NextResponse.json(
+        { error: 'Failed to create answer' },
+        { status: 500 }
+      )
+    }
+
+    return NextResponse.json({ data }, { status: 201 })
+  } catch (error) {
+    console.error('API error:', error)
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    )
   }
-
-  const body = await request.json()
-  const { content, bible_references } = body
-
-  if (!content) {
-    return NextResponse.json({ error: 'Content is required' }, { status: 400 })
-  }
-
-  // Check if question exists
-  const { data: question } = await supabase
-    .from('questions')
-    .select('id, user_id')
-    .eq('id', id)
-    .single()
-
-  if (!question) {
-    return NextResponse.json({ error: 'Question not found' }, { status: 404 })
-  }
-
-  // Create answer
-  const { data: answer, error } = await supabase
-    .from('answers')
-    .insert({
-      question_id: id,
-      user_id: user.id,
-      content,
-      bible_references: bible_references ?? [],
-    })
-    .select(`
-      *,
-      author:profiles!answers_user_id_fkey(id, display_name, avatar_url, level, points)
-    `)
-    .single()
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
-  }
-
-  // Update question's answer count and mark as answered
-  await supabase
-    .from('questions')
-    .update({ 
-      answer_count: supabase.sql`answer_count + 1`,
-      is_answered: true,
-      status: 'answered'
-    })
-    .eq('id', id)
-
-  // Update user's answers count and points
-  await supabase
-    .from('profiles')
-    .update({ 
-      answers_count: supabase.sql`answers_count + 1`,
-      points: supabase.sql`points + 10`
-    })
-    .eq('id', user.id)
-
-  // Notify question author
-  if (question.user_id !== user.id) {
-    await supabase.from('notifications').insert({
-      user_id: question.user_id,
-      type: 'answer',
-      title: 'New answer on your question',
-      message: 'Someone answered your question',
-      link: `/questions/${id}`,
-      actor_id: user.id,
-    })
-  }
-
-  return NextResponse.json({ answer }, { status: 201 })
 }
