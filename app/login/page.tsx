@@ -80,15 +80,15 @@ function LoginContent() {
   }
 
   return (
-    <div className="container flex min-h-[calc(100vh-4rem)] items-center justify-center px-4">
-      <Card className="w-full max-w-md">
+    <div className="min-h-screen bg-gradient-to-br from-background to-muted/30 flex items-center justify-center px-4">
+      <Card className="w-full max-w-md shadow-lg">
         <CardHeader className="text-center">
           <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-2xl bg-primary">
             <BookOpen className="size-8 text-primary-foreground" />
           </div>
-          <CardTitle className="font-serif text-2xl">Welcome to Scripture Connect</CardTitle>
-          <CardDescription>
-            Sign in to join our community of believers exploring Scripture together
+          <CardTitle className="font-serif text-3xl">Scripture Connect</CardTitle>
+          <CardDescription className="mt-2 text-base">
+            Join our community of believers exploring Scripture together
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

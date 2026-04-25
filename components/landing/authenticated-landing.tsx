@@ -26,45 +26,43 @@ export function AuthenticatedLanding({ session }: AuthenticatedLandingProps) {
   const firstName = session.user.name?.split(' ')[0] || 'there'
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center px-4 py-8">
-      <div className="w-full max-w-2xl space-y-8">
+    <div className="flex min-h-screen flex-col items-center justify-center px-4 py-12 sm:py-16">
+      <div className="w-full max-w-3xl space-y-12">
         {/* Welcome Message */}
-        <div className="text-center space-y-2">
-          <h1 className="text-4xl md:text-5xl font-bold font-serif text-foreground">
+        <div className="text-center space-y-3">
+          <h1 className="text-5xl sm:text-6xl font-bold font-serif text-foreground text-balance">
             Welcome, {firstName}!
           </h1>
-          <p className="text-xl text-muted-foreground">
+          <p className="text-xl sm:text-2xl text-muted-foreground text-pretty">
             What question do you have in mind today?
           </p>
         </div>
 
         {/* Question Input */}
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="relative flex items-center">
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="relative">
             <Input
               type="text"
-              placeholder="Ask about Scripture, theology, faith..."
+              placeholder="Ask about Scripture, theology, faith, Bible stories..."
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
-              className="pr-12 py-6 text-base"
+              className="w-full rounded-lg border-2 bg-card px-5 py-4 text-lg shadow-sm transition-all hover:shadow-md focus:shadow-md focus:border-primary"
             />
             <Button
               type="submit"
               size="icon"
-              variant="ghost"
-              className="absolute right-2 hover:bg-accent/20"
+              className="absolute right-2 top-1/2 -translate-y-1/2"
               disabled={!question.trim()}
             >
               <Send className="size-5" />
             </Button>
           </div>
-          <p className="text-sm text-muted-foreground text-center">
-            Or explore below to get started
-          </p>
         </form>
 
-        {/* Navigation Tabs */}
-        <NavigationTabs />
+        {/* Navigation Tabs Section */}
+        <div className="space-y-4">
+          <NavigationTabs />
+        </div>
       </div>
     </div>
   )

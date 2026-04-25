@@ -38,19 +38,22 @@ const tabs = [
 
 export function NavigationTabs() {
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
       {tabs.map(({ label, href, icon: Icon, description }) => (
-        <Link key={href} href={href}>
-          <Button
-            variant="outline"
-            className="w-full h-auto flex flex-col items-center justify-center py-6 px-3 hover:bg-accent/10 hover:border-primary transition-colors"
-          >
-            <Icon className="size-6 mb-2 text-primary" />
-            <span className="font-semibold text-sm md:text-base">{label}</span>
-            <span className="text-xs text-muted-foreground text-center mt-1 hidden md:block">
-              {description}
-            </span>
-          </Button>
+        <Link key={href} href={href} className="group">
+          <div className="relative h-full rounded-lg border bg-card p-4 transition-all duration-200 hover:border-primary hover:shadow-md hover:bg-muted/50 cursor-pointer">
+            <div className="flex h-full flex-col items-center justify-center text-center space-y-3">
+              <div className="rounded-lg bg-primary/10 p-3 transition-colors group-hover:bg-primary/20">
+                <Icon className="size-6 text-primary" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="font-semibold text-base">{label}</h3>
+                <p className="text-xs sm:text-sm text-muted-foreground">
+                  {description}
+                </p>
+              </div>
+            </div>
+          </div>
         </Link>
       ))}
     </div>
