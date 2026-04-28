@@ -22,21 +22,26 @@ async function runMigrations() {
 
     console.log('Running migration: 01-init-schema.sql');
     
-    // Split by semicolon and execute each statement
-    const statements = sql.split(';').filter(stmt => stmt.trim());
-    
-    for (const statement of statements) {
-      if (statement.trim()) {
-        const { error } = await supabase.rpc('exec_sql', {
-          sql: statement.trim()
-        }).catch(() => {
-          // Fallback: use direct query
-          return supabase.from('profiles').select('id').limit(1);
-        });
+    // Use the SQL query directly via the admin client
+    const { error } = await supabase.rpc('sql', {
+      query: sql
+    });
 
-        if (error && !error.message.includes('already exists')) {
-          console.warn(`Warning executing statement:`, error.message);
-        }
+    if (error) {
+      // Try alternative: execute via fetch to the Supabase SQL editor
+      console.log('Trying alternative migration method...');
+      const response = await fetch(`${supabaseUrl}/rest/v1/rpc/sql`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseServiceKey}`,
+          'apikey': supabaseServiceKey,
+        },
+        body: JSON.stringify({ query: sql }),
+      });
+
+      if (!response.ok) {
+        console.warn('SQL execution warning:', response.statusText);
       }
     }
 
